@@ -9,7 +9,7 @@ int elf_class(char *filename, uint8_t *mem){
         return -1;
     }
     if (mem[EI_CLASS] == ELFCLASSNONE ){
-        fprintf(stderr,"%s : invalid class, must be 32 or 64 bits\n",filename);
+        fprintf(stderr,"%s : Invalid class, must be 32 or 64 bits\n",filename);
         return -2;
     }
     return mem[EI_CLASS];
@@ -26,6 +26,11 @@ int elf_disass(char * filename){
 
     if(fstat(fd,&st) < 0){
         perror("fstat");
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+    if(st.st_size>10000000){
+        fprintf(stderr,"%s : File too big\n",filename);
         close(fd);
         exit(EXIT_FAILURE);
     }
