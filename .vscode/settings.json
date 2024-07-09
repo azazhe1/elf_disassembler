@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "stdio.h": "c",
-        "elf_64.h": "c",
-        "stdlib.h": "c"
-    }
-}
