@@ -1,2 +1,2 @@
 # elf_disassembler
-This is a elf disassembler
+This is an elf disassembler
