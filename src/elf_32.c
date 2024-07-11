@@ -5,5 +5,6 @@
 
 int elf_32_disass(char *filename, u_int8_t* mem){
     fprintf(stderr,"%s : Not implemented\n",filename);
+    mem++;
     return 0;
 }
