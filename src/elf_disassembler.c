@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "elf_64.h"
 #include "elf_32.h"
+#include "args_parse.h"
 
 int elf_class(char *filename, uint8_t *mem){
     if (mem[EI_MAG0] != 0x7f || mem[EI_MAG1] != 'E' || mem[EI_MAG2] != 'L' || mem[EI_MAG3] != 'F'){
@@ -15,8 +16,8 @@ int elf_class(char *filename, uint8_t *mem){
     return mem[EI_CLASS];
 }
 
-int elf_disass(char * filename){
-    int fd = open(filename,O_RDONLY);
+int elf_disass(Arguments args){
+    int fd = open(args.filename,O_RDONLY);
     struct stat st;
     uint8_t *mem;
     if(fd < 0){
@@ -30,7 +31,7 @@ int elf_disass(char * filename){
         exit(EXIT_FAILURE);
     }
     if(st.st_size>10000000){
-        fprintf(stderr,"%s : File too big\n",filename);
+        fprintf(stderr,"%s : File too big\n",args.filename);
         close(fd);
         exit(EXIT_FAILURE);
     }
@@ -39,12 +40,12 @@ int elf_disass(char * filename){
         perror("mmap");
         exit(EXIT_FAILURE);
     }
-    switch (elf_class(filename, mem)){
+    switch (elf_class(args.filename, mem)){
     case ELFCLASS64:
-        elf_64_disass(filename, mem);
+        elf_64_disass(args, mem);
         break;
     case ELFCLASS32:
-        elf_32_disass(filename, mem);
+        elf_32_disass(args, mem);
         break;
     default:
         goto end;
@@ -57,13 +58,13 @@ end :
     return 0;
 }
 
-
 int main(int argc, char *argv[]){
-    if(argc!=2){
-        printf("Usage : %s <executable>\n",argv[0]);
-        return 0;
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s [-a/--all] [-x/--all-headers] [-P/--program-headers] [-S/--section-headers] [-s/--syms] <executable>\n", argv[0]);
+        return 1;
     }
-    elf_disass(argv[1]);
+    Arguments args = parse_args(argc, argv);
+    elf_disass(args);
     
     return 1;
 }
