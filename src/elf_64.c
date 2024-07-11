@@ -151,7 +151,7 @@ char *get_symbole_type(unsigned char st_info){
     return type;
 }
 
-char *get_symbole_bind(unsigned char st_info){
+char *get_symbol_bind(unsigned char st_info){
     char *bind;
 
     switch (ELF64_ST_BIND(st_info)) {
@@ -163,7 +163,7 @@ char *get_symbole_bind(unsigned char st_info){
     return bind;
 }
 
-char *get_symbole_visibility(unsigned char st_other){
+char *get_symbol_visibility(unsigned char st_other){
     char *visibility;
 
     switch (ELF64_ST_VISIBILITY(st_other)) {
@@ -176,27 +176,70 @@ char *get_symbole_visibility(unsigned char st_other){
     return visibility;
 }
 
+Symbol64_Info *get_table(u_int8_t* mem, Elf64_Ehdr *ehdr, Elf64_Shdr syms_shdr){
+    Elf64_Sym *sym = (Elf64_Sym *)&mem[syms_shdr.sh_offset];
+    Elf64_Shdr *shdr_table = (Elf64_Shdr *)&mem[ehdr->e_shoff];//find the section symbole string table
+    Elf64_Shdr *strtab_shdr = &shdr_table[syms_shdr.sh_link];
+    char *strtab = (char *)&mem[strtab_shdr->sh_offset];
+    int table_size = TABLE_SIZE(syms_shdr);
+    Symbol64_Info *res = malloc(table_size * sizeof(Symbol64_Info));
+
+    if (res == NULL) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0 ; i < table_size; i++){
+        if(sym[i].st_name!=0){
+            res[i].st_value = sym[i].st_value;
+            res[i].st_size = sym[i].st_size;
+            res[i].st_info =  sym[i].st_info;
+            res[i].st_other =  sym[i].st_other;
+            res[i].st_name = strtab + sym[i].st_name;
+        }else{
+            res[i].st_value = 0;
+            res[i].st_size = 0;
+            res[i].st_info =  0;
+            res[i].st_other =  0;
+            res[i].st_name = 0;
+            res[i].table_size = table_size;
+        }
+    }
+    return res;
+}
+
 int get_sym_table(u_int8_t* mem, Elf64_Ehdr *ehdr){
-    Elf64_Shdr sym_shdr;
-    Elf64_Sym *sym;
-    Elf64_Shdr *shdr_table, *strtab_shdr;
-    char *strtab;
-    int table_size;
+    Elf64_Shdr syms_shdr;
+    Symbol64_Info *syms_table;
 
     printf("\nSymoble table :\n");
-    if(get_section(mem, ehdr, SHT_SYMTAB, &sym_shdr)){
+    if(get_section(mem, ehdr, SHT_SYMTAB, &syms_shdr)){
         fprintf(stderr," No symbole found\n");
         return 1;
     }
-    sym = (Elf64_Sym *)&mem[sym_shdr.sh_offset];
-    shdr_table = (Elf64_Shdr *)&mem[ehdr->e_shoff];//find the section symbole string table
-    strtab_shdr = &shdr_table[sym_shdr.sh_link];
-    strtab = (char *)&mem[strtab_shdr->sh_offset];
-    table_size =  TABLE_SIZE(sym_shdr);
+    syms_table = get_table(mem, ehdr, syms_shdr);
     printf("      %-16s  %-10s %-7s %-7s %-9s %s\n", "VALUE", "SIZE", "TYPE", "BIND", "VISI", "NAME");
-    for(int i = 0; i < table_size; i++){
-        if(sym[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %-9s %s\n", sym[i].st_value, sym[i].st_size, get_symbole_type(sym[i].st_info), get_symbole_bind(sym[i].st_info), get_symbole_visibility(sym[i].st_other), strtab + sym[i].st_name);
+    for(int i=0; i < syms_table[0].table_size; i++){
+        if(syms_table[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %-9s %s\n", syms_table[i].st_value, syms_table[i].st_size, get_symbole_type(syms_table[i].st_info), get_symbol_bind(syms_table[i].st_info), get_symbol_visibility(syms_table[i].st_other), syms_table[i].st_name);
     }
+    free(syms_table);
+    return 0;
+}
+
+int get_dynamic_sym_table(u_int8_t* mem, Elf64_Ehdr *ehdr){
+    Elf64_Shdr dyn_syms_shdr;
+    Symbol64_Info *dyn_syms_table;
+
+    printf("\nDynamic Symoble table :\n");
+    if(get_section(mem, ehdr, SHT_DYNSYM, &dyn_syms_shdr)){
+        fprintf(stderr," No dynamic symbole found\n");
+        return 1;
+    }
+    dyn_syms_table = get_table(mem, ehdr, dyn_syms_shdr);
+    printf("      %-16s  %-10s %-7s %-7s %-9s %s\n", "VALUE", "SIZE", "TYPE", "BIND", "LIB", "NAME");
+    for(int i=0; i < dyn_syms_table[0].table_size; i++){
+        if(dyn_syms_table[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %-9s %s\n", dyn_syms_table[i].st_value, dyn_syms_table[i].st_size, get_symbole_type(dyn_syms_table[i].st_info), get_symbol_bind(dyn_syms_table[i].st_info), "", dyn_syms_table[i].st_name);
+    }
+    free(dyn_syms_table);
     return 0;
 }
 
@@ -217,6 +260,7 @@ int elf_64_disass(Arguments args, u_int8_t* mem){
     if(args.all || args.all_headers || args.program_headers) get_program_header(mem, ehdr);
     if(args.all || args.all_headers || args.section_headers) get_section_header(mem, ehdr);
     if(args.all || args.syms) get_sym_table(mem, ehdr);
+    if(args.dynsyms) get_dynamic_sym_table(mem, ehdr);
 
 end :
     return 0;

@@ -7,6 +7,7 @@ typedef struct {
     int program_headers;
     int section_headers;
     int syms;
+    int dynsyms;
     char *filename;
 } Arguments;
 

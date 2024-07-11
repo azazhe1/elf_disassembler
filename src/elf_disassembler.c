@@ -60,7 +60,7 @@ end :
 
 int main(int argc, char *argv[]){
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s [-a/--all] [-x/--all-headers] [-P/--program-headers] [-S/--section-headers] [-s/--syms] <executable>\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-a/--all] [-x/--all-headers] [-P/--program-headers] [-S/--section-headers] [-s/--syms] [-d/--dynamic-syms] <executable>\n", argv[0]);
         return 1;
     }
     Arguments args = parse_args(argc, argv);
