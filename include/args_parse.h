@@ -8,6 +8,8 @@ typedef struct {
     int section_headers;
     int syms;
     int dynsyms;
+    int dynreloc;
+    int reloc;
     char *filename;
 } Arguments;
 

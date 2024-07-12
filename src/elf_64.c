@@ -45,8 +45,8 @@ void print_format(char * filename, u_int8_t elf_type, u_int8_t elf_archi, Elf64_
     case EM_RISCV:      archi_str =  "RISC-V"; break;
     default: break;
     }
-    printf("%s: ELF\t%s \tArchitecture: 64 bits, %s\n", filename, type_str, archi_str);
-    printf("\nPrgram Entry point : 0x%016lx\n",elf_enry);
+    printf("%s:\tArchitecture: 64 bits, %s, %s\n", filename, archi_str, type_str);
+    printf(" Prgram Entry point: 0x%016lx\n",elf_enry);
 }
 
 char *get_ph_flags(uint32_t p_flags){
@@ -134,6 +134,34 @@ int  get_section(u_int8_t* mem, Elf64_Ehdr *ehdr, uint32_t value, Elf64_Shdr *re
     return 1;
 }
 
+int get_group_section(u_int8_t* mem, Elf64_Ehdr *ehdr, uint32_t value, Elf64_Shdr **result){
+    Elf64_Shdr *shdr= (Elf64_Shdr*)&mem[ehdr->e_shoff];
+    Elf64_Shdr *res;
+    int count = 0;
+    int index = 0;
+    for(int i = 0; i < ehdr->e_shnum; i++){
+        if(shdr[i].sh_type == value){
+            count++;
+        }
+    }
+    if(count == 0){
+        return 0;
+    }
+    res = (Elf64_Shdr *)malloc(count * sizeof(Elf64_Shdr));
+    if (res == NULL) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+    for(int i = 0; i < ehdr->e_shnum; i++){
+         if(shdr[i].sh_type == value){
+            res[index] = shdr[i];
+            index++; 
+        }
+    }
+    *result = res;
+    return count;
+}
+
 char *get_symbole_type(unsigned char st_info){
     char *type;
 
@@ -207,44 +235,149 @@ Symbol64_Info *get_table(u_int8_t* mem, Elf64_Ehdr *ehdr, Elf64_Shdr syms_shdr){
     return res;
 }
 
-int get_sym_table(u_int8_t* mem, Elf64_Ehdr *ehdr){
+Symbol64_Info *get_symbol(u_int8_t* mem, Elf64_Ehdr *ehdr, int show){
     Elf64_Shdr syms_shdr;
-    Symbol64_Info *syms_table;
+    Symbol64_Info *syms;
 
-    printf("\nSymoble table :\n");
+    printf("\nSymbol table :\n");
     if(get_section(mem, ehdr, SHT_SYMTAB, &syms_shdr)){
-        fprintf(stderr," No symbole found\n");
+        fprintf(stderr," No symbol found\n");
+        return NULL;
+    }
+    syms = get_table(mem, ehdr, syms_shdr);
+    if(show){
+        printf("      %-16s  %-10s %-7s %-7s %-9s %s\n", "VALUE", "SIZE", "TYPE", "BIND", "VISI", "NAME");
+        for(int i=0; i < syms[0].table_size; i++){
+            if(syms[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %-9s %s\n", syms[i].st_value, syms[i].st_size, get_symbole_type(syms[i].st_info), get_symbol_bind(syms[i].st_info), get_symbol_visibility(syms[i].st_other), syms[i].st_name);
+        }
+    };
+    return syms;
+}
+
+Symbol64_Info *get_dynamic_symbol(u_int8_t* mem, Elf64_Ehdr *ehdr, int show){
+    Elf64_Shdr dyn_syms_shdr;
+    Symbol64_Info *dyn_syms;
+
+    
+    if(get_section(mem, ehdr, SHT_DYNSYM, &dyn_syms_shdr)){
+        fprintf(stderr," No dynamic symbol found\n");
+        return NULL;
+    }
+    dyn_syms = get_table(mem, ehdr, dyn_syms_shdr);
+    if(show){
+        printf("\nDynamic Symbol table :\n");
+        printf("      %-16s  %-10s %-7s %-7s %s\n", "VALUE", "SIZE", "TYPE", "BIND", "NAME");
+        for(int i=0; i < dyn_syms[0].table_size; i++){
+            if(dyn_syms[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %s\n", dyn_syms[i].st_value, dyn_syms[i].st_size, get_symbole_type(dyn_syms[i].st_info), get_symbol_bind(dyn_syms[i].st_info), dyn_syms[i].st_name);
+        }
+    }
+    
+    return dyn_syms;
+}
+
+char *get_relo_type(uint64_t r_info){
+    char *rel_type;
+    switch (ELF64_R_TYPE(r_info))
+    {
+    case R_X86_64_NONE:         rel_type = "R_X86_64_NONE"; break;
+    case R_X86_64_64:           rel_type = "R_X86_64_64"; break;
+    case R_X86_64_PC32:         rel_type = "R_X86_64_PC32"; break;
+    case R_X86_64_GOT32:        rel_type = "R_X86_64_GOT32"; break;
+    case R_X86_64_PLT32:        rel_type = "R_X86_64_PLT32"; break;
+    case R_X86_64_COPY:         rel_type = "R_X86_64_COPY"; break;
+    case R_X86_64_GLOB_DAT:     rel_type = "R_X86_64_GLOB_DAT"; break;
+    case R_X86_64_JUMP_SLOT:    rel_type = "R_X86_64_JUMP_SLOT"; break;
+    case R_X86_64_RELATIVE:     rel_type = "R_X86_64_RELATIVE"; break;
+    case R_X86_64_GOTPCREL:     rel_type = "R_X86_64_GOTPCREL"; break;
+    case R_X86_64_32:           rel_type = "R_X86_64_32"; break;
+    case R_X86_64_32S:          rel_type = "R_X86_64_32S"; break;
+    case R_X86_64_16:           rel_type = "R_X86_64_16"; break;
+    case R_X86_64_PC16:         rel_type = "R_X86_64_PC16"; break;
+    case R_X86_64_8:            rel_type = "R_X86_64_8"; break;
+    case R_X86_64_PC8:          rel_type = "R_X86_64_PC8"; break;
+    default:                    rel_type = "Unknow"; break;
+    }
+    return rel_type;
+}
+
+int get_dynamic_relocation(u_int8_t* mem, Elf64_Ehdr *ehdr){
+    Elf64_Shdr *rela_shdr;
+    Elf64_Rela **rela;
+    Symbol64_Info *dyn_syms;
+    int count;
+
+    printf("Dynamic Relocation records :\n");
+    count = get_group_section(mem, ehdr, SHT_RELA, &rela_shdr);
+    if(count < 1){
+        fprintf(stderr," No dynamic relocation records found\n");
         return 1;
     }
-    syms_table = get_table(mem, ehdr, syms_shdr);
-    printf("      %-16s  %-10s %-7s %-7s %-9s %s\n", "VALUE", "SIZE", "TYPE", "BIND", "VISI", "NAME");
-    for(int i=0; i < syms_table[0].table_size; i++){
-        if(syms_table[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %-9s %s\n", syms_table[i].st_value, syms_table[i].st_size, get_symbole_type(syms_table[i].st_info), get_symbol_bind(syms_table[i].st_info), get_symbol_visibility(syms_table[i].st_other), syms_table[i].st_name);
+    rela = (Elf64_Rela **)malloc(count * sizeof(Elf64_Rela *));
+    if (rela == NULL) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
     }
-    free(syms_table);
+    dyn_syms = get_dynamic_symbol(mem, ehdr, 0);
+    for(int i = 0; i < count; i++){
+        rela[i] = (Elf64_Rela *)&mem[rela_shdr[i].sh_offset]; 
+    }
+     printf("     %-11s %s %36s\n", "OFFSET", "TYPE", "SYMBOL-NAME + ADDEND");
+    for(int i =0; i < count; i++){
+        for(int j = 0; j < (int)TABLE_SIZE(rela_shdr[i]); j++){
+            if(ELF64_R_SYM(rela[i][j].r_info)!=0){
+                printf("%016lx %-20s %s + %ld\n", rela[i][j].r_offset, get_relo_type(rela[i][j].r_info), dyn_syms[ELF64_R_SYM(rela[i][j].r_info)].st_name, rela[i][j].r_addend);
+            }else {
+                printf("%016lx %-20s %ld\n", rela[i][j].r_offset, get_relo_type(rela[i][j].r_info), rela[i][j].r_addend);
+            }    
+        }
+    }
+    free(dyn_syms);
+    free(rela_shdr);
+    free(rela);
     return 0;
 }
 
-int get_dynamic_sym_table(u_int8_t* mem, Elf64_Ehdr *ehdr){
-    Elf64_Shdr dyn_syms_shdr;
-    Symbol64_Info *dyn_syms_table;
+int get_relocation(u_int8_t* mem, Elf64_Ehdr *ehdr){
+    Elf64_Shdr *rel_shdr;
+    Elf64_Rel **rel;
+    Symbol64_Info *dyn_syms;
+    int count;
 
-    printf("\nDynamic Symoble table :\n");
-    if(get_section(mem, ehdr, SHT_DYNSYM, &dyn_syms_shdr)){
-        fprintf(stderr," No dynamic symbole found\n");
+    printf("Relocation records :\n");
+    count = get_group_section(mem, ehdr, SHT_REL, &rel_shdr);
+    if(count < 1){
+        fprintf(stderr," No relocation records found\n");
         return 1;
     }
-    dyn_syms_table = get_table(mem, ehdr, dyn_syms_shdr);
-    printf("      %-16s  %-10s %-7s %-7s %-9s %s\n", "VALUE", "SIZE", "TYPE", "BIND", "LIB", "NAME");
-    for(int i=0; i < dyn_syms_table[0].table_size; i++){
-        if(dyn_syms_table[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %-9s %s\n", dyn_syms_table[i].st_value, dyn_syms_table[i].st_size, get_symbole_type(dyn_syms_table[i].st_info), get_symbol_bind(dyn_syms_table[i].st_info), "", dyn_syms_table[i].st_name);
+    rel = (Elf64_Rel **)malloc(count * sizeof(Elf64_Rel *));
+    if (rel == NULL) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
     }
-    free(dyn_syms_table);
+    dyn_syms = get_dynamic_symbol(mem, ehdr, 0);
+    for(int i = 0; i < count; i++){
+        rel[i] = (Elf64_Rel *)&mem[rel_shdr[i].sh_offset]; 
+    }
+     printf("     %-11s %s %36s\n", "OFFSET", "TYPE", "SYMBOL-NAME");
+    for(int i =0; i < count; i++){
+        for(int j = 0; j < (int)TABLE_SIZE(rel_shdr[i]); j++){
+            if(ELF64_R_SYM(rel[i][j].r_info)!=0){
+                printf("%016lx %-20s %s\n", rel[i][j].r_offset, get_relo_type(rel[i][j].r_info), dyn_syms[ELF64_R_SYM(rel[i][j].r_info)].st_name);
+            }else {
+                printf("%016lx %-20s\n", rel[i][j].r_offset, get_relo_type(rel[i][j].r_info));
+            }
+        }
+    }
+    free(dyn_syms);
+    free(rel_shdr);
+    free(rel);
     return 0;
 }
 
 int elf_64_disass(Arguments args, u_int8_t* mem){
     Elf64_Ehdr *ehdr;
+    Symbol64_Info *dyn_syms;
+    Symbol64_Info *syms;
     int elf_type,elf_archi;
 
     ehdr = (Elf64_Ehdr *)mem;
@@ -259,9 +392,20 @@ int elf_64_disass(Arguments args, u_int8_t* mem){
     }
     if(args.all || args.all_headers || args.program_headers) get_program_header(mem, ehdr);
     if(args.all || args.all_headers || args.section_headers) get_section_header(mem, ehdr);
-    if(args.all || args.syms) get_sym_table(mem, ehdr);
-    if(args.dynsyms) get_dynamic_sym_table(mem, ehdr);
-
+    if(args.all || args.syms){
+        syms = get_symbol(mem, ehdr, 1);
+        if(syms != NULL){
+            free(syms);
+        }
+    }
+    if(args.dynsyms){
+        dyn_syms = get_dynamic_symbol(mem, ehdr, 1);
+        if(dyn_syms != NULL){
+            free(dyn_syms);
+        }
+    }
+    if(args.reloc) get_relocation(mem, ehdr);
+    if(args.dynreloc) get_dynamic_relocation(mem, ehdr);
 end :
     return 0;
 }
