@@ -34,8 +34,8 @@ void print_format(char * filename, u_int8_t elf_type, u_int8_t elf_archi, Elf64_
     switch (elf_type)
     {
     case ET_EXEC:   type_str =  "ET_EXEC"; break;
-    case ET_DYN:    type_str =  "ET_DYN";
-    default: break;
+    case ET_DYN:    type_str =  "ET_DYN"; break;
+    default:        type_str = "Unknow"; break;
     }
     switch (elf_archi)
     {
@@ -43,10 +43,10 @@ void print_format(char * filename, u_int8_t elf_type, u_int8_t elf_archi, Elf64_
     case EM_AARCH64:    archi_str =  "AArch64"; break;
     case EM_MIPS:       archi_str =  "MIPS"; break;
     case EM_RISCV:      archi_str =  "RISC-V"; break;
-    default: break;
+    default:            archi_str = "Unknow"; break;
     }
     printf("%s:\tArchitecture: 64 bits, %s, %s\n", filename, archi_str, type_str);
-    printf(" Prgram Entry point: 0x%016lx\n",elf_enry);
+    printf("Prgram Entry point: 0x%016lx\n",elf_enry);
 }
 
 char *get_ph_flags(uint32_t p_flags){
