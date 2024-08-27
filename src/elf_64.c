@@ -117,6 +117,7 @@ Section64_Info *get_section_header(u_int8_t* mem, Elf64_Ehdr *ehdr,int show){
     const char *section_name;
     int count = 0;
     Section64_Info *sections = (Section64_Info *)malloc(ehdr->e_shnum * sizeof(Section64_Info));
+
     if(show){
         printf("\nSection header :\n");
         printf(" %-20s   %-8s      %-14s %-11s %-5s %-3s\n", "", "SIZE", "VMA", "OFFSET", "FLAGS", "ALIGN");
@@ -160,6 +161,7 @@ int get_group_section(u_int8_t* mem, Elf64_Ehdr *ehdr, uint32_t value, Elf64_Shd
     Elf64_Shdr *res;
     int count = 0;
     int index = 0;
+
     for(int i = 0; i < ehdr->e_shnum; i++){
         if(shdr[i].sh_type == value){
             count++;
@@ -279,7 +281,6 @@ Symbol64_Info *get_dynamic_symbol(u_int8_t* mem, Elf64_Ehdr *ehdr, int show){
     Elf64_Shdr dyn_syms_shdr;
     Symbol64_Info *dyn_syms;
 
-    
     if(get_section(mem, ehdr, SHT_DYNSYM, &dyn_syms_shdr)){
         fprintf(stderr," No dynamic symbol found\n");
         return NULL;
@@ -292,12 +293,12 @@ Symbol64_Info *get_dynamic_symbol(u_int8_t* mem, Elf64_Ehdr *ehdr, int show){
             if(dyn_syms[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %s\n", dyn_syms[i].st_value, dyn_syms[i].st_size, get_symbole_type(dyn_syms[i].st_info), get_symbol_bind(dyn_syms[i].st_info), dyn_syms[i].st_name);
         }
     }
-    
     return dyn_syms;
 }
 
 char *get_relo_type(uint64_t r_info){
     char *rel_type;
+    
     switch (ELF64_R_TYPE(r_info))
     {
     case R_X86_64_NONE:         rel_type = "R_X86_64_NONE"; break;
@@ -430,17 +431,8 @@ int elf_64_disass(Arguments args, u_int8_t* mem){
         goto end;
     }
     if(args.all || args.all_headers || args.program_headers) get_program_header(mem, ehdr);
-    if(args.all || args.all_headers || args.section_headers){
-        sections = get_section_header(mem, ehdr,1);
-    }else{
-        sections = get_section_header(mem, ehdr,0);
-    }
-    if(args.all || args.syms){
-        syms = get_symbol(mem, ehdr, 1);
-        
-    }else{
-        syms = get_symbol(mem, ehdr, 0);
-    }
+    sections = get_section_header(mem, ehdr,args.all || args.all_headers || args.section_headers);
+    syms = get_symbol(mem, ehdr, args.all || args.syms);
     if(args.dynsyms){
         dyn_syms = get_dynamic_symbol(mem, ehdr, 1);
         if(dyn_syms != NULL){
@@ -448,13 +440,8 @@ int elf_64_disass(Arguments args, u_int8_t* mem){
         }
     }
     if(args.reloc) get_relocation(mem, ehdr);
-    if(args.dynreloc){
-        dyn_rela = get_dynamic_relocation(mem, ehdr, 1);
-    }else {
-        dyn_rela = get_dynamic_relocation(mem, ehdr, 0);
-    }
-    disass(mem, sections, dyn_rela, syms);
-
+    dyn_rela = get_dynamic_relocation(mem, ehdr, args.dynreloc);
+    if(args.disassemble_all) disass(mem, sections, dyn_rela, syms);
 end :
     if(syms != NULL) free(syms);
     if(sections != NULL) free(sections);

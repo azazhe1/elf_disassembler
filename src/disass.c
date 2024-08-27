@@ -30,13 +30,11 @@ int count_inst_section(u_int8_t* section_mem, Section64_Info section_inf, csh ha
 Section disass_section(u_int8_t* section_mem, Section64_Info section_inf, csh handle){
     Section section;
     int count_max_inst = count_inst_section(section_mem, section_inf, handle);
-    
     cs_insn *insn;
     size_t count;
     uint64_t read_size = 0;
     int index = 0;
     int bad = -1;
-    //Erreur vers ici, il crash lorsqu'on tente d'utiliser une inst;
     section.name = section_inf.sh_name;
     section.count_inst = count_max_inst;
     section.inst_list = malloc(sizeof(Instruction)*(count_max_inst+1));
@@ -74,7 +72,6 @@ Section disass_section(u_int8_t* section_mem, Section64_Info section_inf, csh ha
         }
     }
     section.count_inst = index;
-
     return section;
 }
 
@@ -156,6 +153,7 @@ Plt *sanitize_plt(Section *plt, Dynamic_Reloc *dyn_rela){
 }
 
 char *check_sym(uint64_t address, Symbol64_Info *syms){
+    if (syms == NULL) return NULL;
     for(int i=0; i < syms[0].table_size; i++){
         if(syms[i].st_value == address) return syms[i].st_name;
     }
@@ -164,7 +162,7 @@ char *check_sym(uint64_t address, Symbol64_Info *syms){
 
 char *check_plt(uint64_t address, Plt *plt_list){
     int i = 0;
-
+    if(plt_list == NULL) return NULL;
     while(plt_list[i].name != NULL){
         if(address == plt_list[i].address) return (char *)plt_list[i].name;
         i++;
@@ -180,7 +178,6 @@ char *check_call(char *op_str, Plt *plt_list, Symbol64_Info *syms, int *is_plt){
     address = strtoul(op_str, NULL, 16);
     if((res = check_plt(address, plt_list)) != NULL) *is_plt = 1;
     else if((res = check_sym(address, syms)) != NULL) *is_plt = 0;
-
 end:
     return res;
 }
@@ -194,7 +191,6 @@ char *check_jump(uint64_t last_res_addr, char *op_str, Plt *plt_list, Symbol64_I
     *offset = address-last_res_addr;
     if((res = check_plt(last_res_addr, plt_list)) != NULL) *is_plt = 1;
     else if((res = check_sym(last_res_addr, syms)) != NULL) *is_plt = 0;
-
 end :
     return  res;
 
@@ -275,7 +271,6 @@ int disass(u_int8_t* mem, Section64_Info *sections_inf, Dynamic_Reloc *dyn_rela,
     section_plt[section_plt_index].name = NULL;
     plt_list = sanitize_plt(section_plt, dyn_rela);
     show_disass(section_list, nb_sections, plt_list, sym);
-//end :
     if(plt_list) free(plt_list);
     free_sections(section_list, nb_sections);
     cs_close(&handle);

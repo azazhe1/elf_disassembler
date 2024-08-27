@@ -10,6 +10,7 @@ typedef struct {
     int dynsyms;
     int dynreloc;
     int reloc;
+    int disassemble_all;
     char *filename;
 } Arguments;
 

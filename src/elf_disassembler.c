@@ -19,6 +19,7 @@ int elf_disass(Arguments args){
     int fd = open(args.filename,O_RDONLY);
     struct stat st;
     uint8_t *mem;
+
     if(fd < 0){
         perror("open");
         exit(EXIT_FAILURE);
@@ -50,7 +51,6 @@ int elf_disass(Arguments args){
         goto end;
         break;
     }
-
 end :
     close(fd);
     munmap(mem,st.st_size);
@@ -59,12 +59,11 @@ end :
 
 int main(int argc, char *argv[]){
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s [-a/--all] [-x/--all-headers] [-P/--program-headers] [-S/--section-headers] [-s/--syms] [-d/--dynamic-syms] [-r, --reloc] [-R/--dynamic-reloc] <executable>\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-a/--all] [-x/--all-headers] [-P/--program-headers] [-S/--section-headers] [-s/--syms] [-d/--dynamic-syms] [-r, --reloc] [-R/--dynamic-reloc] [-D/--disassemble-all] <executable>\n", argv[0]);
         return 1;
     }
     Arguments args = parse_args(argc, argv);
     elf_disass(args);
-    
     return 1;
 }
 

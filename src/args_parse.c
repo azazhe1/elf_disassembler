@@ -13,6 +13,7 @@ Arguments parse_args(int argc, char *argv[]){
     args.dynsyms = 0;
     args.dynreloc = 0;
     args.reloc = 0;
+    args.disassemble_all = 0;
     args.filename = NULL;
 
     struct option long_options[] = {
@@ -24,11 +25,12 @@ Arguments parse_args(int argc, char *argv[]){
         {"dynamic-syms", no_argument, NULL, 'd'},
         {"dynamic-reloc", no_argument, NULL, 'R'},
         {"reloc", no_argument, NULL, 'r'},
+        {"disassemble-all", no_argument, NULL, 'D'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "axPSsdRr", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "axPSsdRrD", long_options, NULL)) != -1) {
         switch (opt) {
             case 'a' :  args.all = 1; break;
             case 'x':   args.all_headers = 1; break;
@@ -38,18 +40,17 @@ Arguments parse_args(int argc, char *argv[]){
             case 'd':   args.dynsyms = 1; break;
             case 'R':   args.dynreloc = 1; break;
             case 'r':   args.reloc = 1; break;
+            case 'D':   args.disassemble_all = 1; break;
             default:
-                fprintf(stderr, "Usage: %s [-a/--all] [-x/--all-headers] [-P/--program-headers] [-S/--section-headers] [-s/--syms] [-d/--dynamic-syms] [-r, --reloc] [-R, --dynamic-reloc] <executable>\n", argv[0]);
+                fprintf(stderr, "Usage: %s [-a/--all] [-x/--all-headers] [-P/--program-headers] [-S/--section-headers] [-s/--syms] [-d/--dynamic-syms] [-r, --reloc] [-R, --dynamic-reloc] [-D/--disassemble-all] <executable>\n", argv[0]);
                 exit(EXIT_FAILURE);
         }
     }
-
     if (optind < argc) {
         args.filename = argv[optind];
     } else {
         fprintf(stderr, "Expected argument after options\n");
         exit(EXIT_FAILURE);
     }
-
     return args;
 }
