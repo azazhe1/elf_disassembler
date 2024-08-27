@@ -1,8 +1,10 @@
-#include "elf_64.h"
+#include "disass.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-uint16_t SUPPORTED_ARCHI []= {EM_X86_64,EM_AARCH64,EM_MIPS,EM_RISCV};
+uint16_t SUPPORTED_ARCHI []= {EM_X86_64};
+
+Elf64_Addr e_entry;
 
 uint16_t get_elf_type(char *filename, Elf64_Ehdr *ehdr){
     if (ehdr->e_type == ET_NONE){
@@ -30,7 +32,7 @@ uint16_t get_architecture(char *filename, Elf64_Ehdr *ehdr){
 void print_format(char * filename, u_int8_t elf_type, u_int8_t elf_archi, Elf64_Addr elf_enry){
     char *type_str;
     char *archi_str;
-    
+
     switch (elf_type)
     {
     case ET_EXEC:   type_str =  "ET_EXEC"; break;
@@ -108,18 +110,37 @@ void get_program_header(u_int8_t* mem, Elf64_Ehdr *ehdr){
     }
 }
 
-void get_section_header(u_int8_t* mem, Elf64_Ehdr *ehdr){
+Section64_Info *get_section_header(u_int8_t* mem, Elf64_Ehdr *ehdr,int show){
     Elf64_Shdr *shdr= (Elf64_Shdr*)&mem[ehdr->e_shoff];
     Elf64_Shdr *shstrtab = &shdr[ehdr->e_shstrndx];//Find the section header string table
     const char *shstrtab_p = (const char*)&mem[shstrtab->sh_offset];
-
-    printf("\nSection header :\n");
-    printf(" %-20s   %-8s      %-14s %-11s %-5s %-3s\n", "", "SIZE", "VMA", "OFFSET", "FLAGS", "ALIGN");
+    const char *section_name;
+    int count = 0;
+    Section64_Info *sections = (Section64_Info *)malloc(ehdr->e_shnum * sizeof(Section64_Info));
+    if(show){
+        printf("\nSection header :\n");
+        printf(" %-20s   %-8s      %-14s %-11s %-5s %-3s\n", "", "SIZE", "VMA", "OFFSET", "FLAGS", "ALIGN");
+    }
     for(int i = 0; i < ehdr->e_shnum; i++) {
-        if(shstrtab_p[shdr[i].sh_name] != '\0') {
-            printf(" %-20s %08lx %016lx %016lx %05lx 2^%d\n", &shstrtab_p[shdr[i].sh_name], shdr[i].sh_size, shdr[i].sh_addr, shdr[i].sh_offset, shdr[i].sh_flags, get_power_2(shdr[i].sh_addralign));
+        section_name = &shstrtab_p[shdr[i].sh_name];
+        if(*section_name != '\0') {
+            sections[count].sh_name = section_name;
+            sections[count].sh_type = shdr[i].sh_type;
+            sections[count].sh_flags = shdr[i].sh_flags;
+            sections[count].sh_offset = shdr[i].sh_offset;
+            sections[count].sh_size = shdr[i].sh_size;
+            if(show){
+                printf(" %-20s %08lx %016lx %016lx %05lx 2^%d\n", section_name, shdr[i].sh_size, shdr[i].sh_addr, shdr[i].sh_offset, shdr[i].sh_flags, get_power_2(shdr[i].sh_addralign));
+            }
+            count++;
         }
     }
+    sections[count].sh_name = 0;
+    sections[count].sh_type = 0;
+    sections[count].sh_flags = 0;
+    sections[count].sh_offset = 0;
+    sections[count].sh_size = 0;
+    return sections;
 }
 
 int  get_section(u_int8_t* mem, Elf64_Ehdr *ehdr, uint32_t value, Elf64_Shdr *result){
@@ -239,13 +260,13 @@ Symbol64_Info *get_symbol(u_int8_t* mem, Elf64_Ehdr *ehdr, int show){
     Elf64_Shdr syms_shdr;
     Symbol64_Info *syms;
 
-    printf("\nSymbol table :\n");
     if(get_section(mem, ehdr, SHT_SYMTAB, &syms_shdr)){
-        fprintf(stderr," No symbol found\n");
+        if(show) fprintf(stderr," No symbol found\n");
         return NULL;
     }
     syms = get_table(mem, ehdr, syms_shdr);
     if(show){
+        printf("\nSymbol table :\n");
         printf("      %-16s  %-10s %-7s %-7s %-9s %s\n", "VALUE", "SIZE", "TYPE", "BIND", "VISI", "NAME");
         for(int i=0; i < syms[0].table_size; i++){
             if(syms[i].st_name != 0) printf(" %016lx %016lx %-7s %-7s %-9s %s\n", syms[i].st_value, syms[i].st_size, get_symbole_type(syms[i].st_info), get_symbol_bind(syms[i].st_info), get_symbol_visibility(syms[i].st_other), syms[i].st_name);
@@ -300,17 +321,18 @@ char *get_relo_type(uint64_t r_info){
     return rel_type;
 }
 
-int get_dynamic_relocation(u_int8_t* mem, Elf64_Ehdr *ehdr){
+Dynamic_Reloc *get_dynamic_relocation(u_int8_t* mem, Elf64_Ehdr *ehdr, int show){
     Elf64_Shdr *rela_shdr;
     Elf64_Rela **rela;
     Symbol64_Info *dyn_syms;
     int count;
+    int index_dyn_rel = 0;
+    Dynamic_Reloc *dyn_rela = malloc(MAX_DYN_RELO*sizeof(Dynamic_Reloc));
 
-    printf("Dynamic Relocation records :\n");
     count = get_group_section(mem, ehdr, SHT_RELA, &rela_shdr);
     if(count < 1){
         fprintf(stderr," No dynamic relocation records found\n");
-        return 1;
+        return NULL;
     }
     rela = (Elf64_Rela **)malloc(count * sizeof(Elf64_Rela *));
     if (rela == NULL) {
@@ -321,20 +343,32 @@ int get_dynamic_relocation(u_int8_t* mem, Elf64_Ehdr *ehdr){
     for(int i = 0; i < count; i++){
         rela[i] = (Elf64_Rela *)&mem[rela_shdr[i].sh_offset]; 
     }
-     printf("     %-11s %s %36s\n", "OFFSET", "TYPE", "SYMBOL-NAME + ADDEND");
+    if(show){
+        printf("Dynamic Relocation records :\n");
+        printf("     %-11s %s %36s\n", "OFFSET", "TYPE", "SYMBOL-NAME + ADDEND");
+    }
     for(int i =0; i < count; i++){
         for(int j = 0; j < (int)TABLE_SIZE(rela_shdr[i]); j++){
+            if(show){
+                if(ELF64_R_SYM(rela[i][j].r_info)!=0){
+                    printf("%016lx %-20s %s + %ld\n", rela[i][j].r_offset, get_relo_type(rela[i][j].r_info), dyn_syms[ELF64_R_SYM(rela[i][j].r_info)].st_name, rela[i][j].r_addend);
+                }else {
+                    printf("%016lx %-20s %ld\n", rela[i][j].r_offset, get_relo_type(rela[i][j].r_info), rela[i][j].r_addend);
+                }
+            }
             if(ELF64_R_SYM(rela[i][j].r_info)!=0){
-                printf("%016lx %-20s %s + %ld\n", rela[i][j].r_offset, get_relo_type(rela[i][j].r_info), dyn_syms[ELF64_R_SYM(rela[i][j].r_info)].st_name, rela[i][j].r_addend);
-            }else {
-                printf("%016lx %-20s %ld\n", rela[i][j].r_offset, get_relo_type(rela[i][j].r_info), rela[i][j].r_addend);
-            }    
+                dyn_rela[index_dyn_rel].address = rela[i][j].r_offset;
+                dyn_rela[index_dyn_rel].dr_name = dyn_syms[ELF64_R_SYM(rela[i][j].r_info)].st_name;
+                index_dyn_rel++;
+            }
         }
     }
+    dyn_rela[index_dyn_rel].address = 0;
+    dyn_rela[index_dyn_rel].dr_name = NULL;
     free(dyn_syms);
     free(rela_shdr);
     free(rela);
-    return 0;
+    return dyn_rela;
 }
 
 int get_relocation(u_int8_t* mem, Elf64_Ehdr *ehdr){
@@ -374,29 +408,38 @@ int get_relocation(u_int8_t* mem, Elf64_Ehdr *ehdr){
     return 0;
 }
 
+
+
 int elf_64_disass(Arguments args, u_int8_t* mem){
     Elf64_Ehdr *ehdr;
     Symbol64_Info *dyn_syms;
-    Symbol64_Info *syms;
+    Symbol64_Info *syms = NULL;
+    Section64_Info *sections = NULL;
     int elf_type,elf_archi;
+    Dynamic_Reloc *dyn_rela = NULL;
 
     ehdr = (Elf64_Ehdr *)mem;
     elf_type = get_elf_type(args.filename, ehdr);
     if(elf_type == 0) goto end;
     elf_archi = get_architecture(args.filename, ehdr);
     if(elf_archi == 0) goto end;
+    e_entry = ehdr->e_entry;
     print_format(args.filename, elf_type, elf_archi, ehdr->e_entry);
     if(elf_archi != EM_X86_64){
         fprintf(stderr, "%s : Architecture not implemented\n", args.filename);
         goto end;
     }
     if(args.all || args.all_headers || args.program_headers) get_program_header(mem, ehdr);
-    if(args.all || args.all_headers || args.section_headers) get_section_header(mem, ehdr);
+    if(args.all || args.all_headers || args.section_headers){
+        sections = get_section_header(mem, ehdr,1);
+    }else{
+        sections = get_section_header(mem, ehdr,0);
+    }
     if(args.all || args.syms){
         syms = get_symbol(mem, ehdr, 1);
-        if(syms != NULL){
-            free(syms);
-        }
+        
+    }else{
+        syms = get_symbol(mem, ehdr, 0);
     }
     if(args.dynsyms){
         dyn_syms = get_dynamic_symbol(mem, ehdr, 1);
@@ -405,7 +448,16 @@ int elf_64_disass(Arguments args, u_int8_t* mem){
         }
     }
     if(args.reloc) get_relocation(mem, ehdr);
-    if(args.dynreloc) get_dynamic_relocation(mem, ehdr);
+    if(args.dynreloc){
+        dyn_rela = get_dynamic_relocation(mem, ehdr, 1);
+    }else {
+        dyn_rela = get_dynamic_relocation(mem, ehdr, 0);
+    }
+    disass(mem, sections, dyn_rela, syms);
+
 end :
+    if(syms != NULL) free(syms);
+    if(sections != NULL) free(sections);
+    if(dyn_rela != NULL) free(dyn_rela);
     return 0;
 }

@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "elf_64.h"
-#include "elf_32.h"
 #include "args_parse.h"
 
 int elf_class(char *filename, uint8_t *mem){
@@ -45,7 +44,7 @@ int elf_disass(Arguments args){
         elf_64_disass(args, mem);
         break;
     case ELFCLASS32:
-        elf_32_disass(args, mem);
+        fprintf(stderr,"%s : x86 is not supported\n",args.filename);
         break;
     default:
         goto end;
